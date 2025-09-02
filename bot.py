@@ -3,7 +3,7 @@ import discord
 from discord.ext import commands
 
 # ===== CONFIG =====
-GUILD_ID = 123456789012345678  # Replace with your server ID
+GUILD_ID = 1361678640403845211  # Your server ID
 UNREGISTERED_ROLE = "Unregistered"
 AWAITING_ROLE = "⏳ Awaiting Approval"
 
@@ -15,14 +15,26 @@ bot = commands.Bot(command_prefix="!", intents=intents)
 # ===== ON READY =====
 @bot.event
 async def on_ready():
-    await bot.tree.sync(guild=discord.Object(id=GUILD_ID))
     print(f"Logged in as {bot.user}")
+    # Register slash commands globally to avoid Missing Access
+    try:
+        await bot.tree.sync()  # Global sync
+        print("Slash commands synced globally.")
+    except discord.Forbidden:
+        print("Warning: Could not sync slash commands. Check bot permissions.")
 
 # ===== SLASH COMMAND =====
-@bot.tree.command(guild=discord.Object(id=GUILD_ID), description="Register your Roblox username")
+@bot.tree.command(description="Register your Roblox username")
 async def register(interaction: discord.Interaction, name: str):
-    guild = interaction.guild
-    member = interaction.user
+    guild = bot.get_guild(GUILD_ID)
+    if not guild:
+        await interaction.response.send_message("Error: Could not find the server.", ephemeral=True)
+        return
+
+    member = guild.get_member(interaction.user.id)
+    if not member:
+        await interaction.response.send_message("Error: Could not find you in the server.", ephemeral=True)
+        return
 
     # Find roles
     unregistered_role = discord.utils.get(guild.roles, name=UNREGISTERED_ROLE)
@@ -36,11 +48,11 @@ async def register(interaction: discord.Interaction, name: str):
         return
 
     # Remove Unregistered role
-    if unregistered_role in member.roles:
+    if unregistered_role and unregistered_role in member.roles:
         await member.remove_roles(unregistered_role)
 
     # Add Awaiting Approval role
-    if awaiting_role not in member.roles:
+    if awaiting_role and awaiting_role not in member.roles:
         await member.add_roles(awaiting_role)
 
     # Send confirmation
