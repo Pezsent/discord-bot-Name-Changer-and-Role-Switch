@@ -1,77 +1,39 @@
 import os
 import discord
+from discord import app_commands
 from discord.ext import commands
 
-# ---------------- CONFIG ----------------
-TOKEN = os.getenv("DISCORD_TOKEN")  # read token from environment variable
-GUILD_ID = 1361678640403845211      # your server ID
-
-UNREGISTERED_ROLE = "Unregistered"
-AWAITING_APPROVAL_ROLE = "⏳ Awaiting Approval"
-# ----------------------------------------
+DISCORD_TOKEN = os.getenv("DISCORD_TOKEN")
 
 intents = discord.Intents.default()
-intents.members = True  # needed to manage roles and nicknames
+intents.guilds = True
+intents.members = True
 
-bot = commands.Bot(command_prefix="?", intents=intents)  # prefix doesn't matter for slash commands
+bot = commands.Bot(command_prefix="!", intents=intents)
+tree = bot.tree
 
-# ---------------- EVENTS ----------------
+GUILD_ID = YOUR_GUILD_ID  # replace with your server ID
+
 @bot.event
 async def on_ready():
     print(f"Logged in as {bot.user}")
-    guild = discord.Object(id=GUILD_ID)
-    
-    # Sync slash commands to the guild
-    await bot.tree.sync(guild=guild)
-    print("Slash commands synced for your server!")
-
-    # --- DEBUG: List all registered commands in the guild ---
-    commands_list = await bot.tree.fetch_commands(guild=guild)
-    print("Registered commands in this guild:")
-    for cmd in commands_list:
-        print(f"- {cmd.name}")
-
-# ---------------- COMMAND ----------------
-@bot.tree.command(guild=discord.Object(id=GUILD_ID), description="Register your Roblox username")
-async def register(interaction: discord.Interaction, username: str):
-    member = interaction.user
-    guild = interaction.guild
-
-    # Get roles
-    unregistered_role = discord.utils.get(guild.roles, name=UNREGISTERED_ROLE)
-    awaiting_role = discord.utils.get(guild.roles, name=AWAITING_APPROVAL_ROLE)
-
-    # Change nickname
     try:
-        await member.edit(nick=username)
+        await tree.sync(guild=discord.Object(id=GUILD_ID))
+        print("Slash commands synced for this guild!")
+    except Exception as e:
+        print(f"Error syncing commands: {e}")
+
+@tree.command(name="register", description="Register your nickname", guild=discord.Object(id=GUILD_ID))
+@app_commands.describe(name="The nickname you want to register")
+async def register(interaction: discord.Interaction, name: str):
+    print(f"DEBUG: /register triggered by {interaction.user} with name={name}")  # debug
+    try:
+        await interaction.user.edit(nick=name)
+        await interaction.response.send_message(f"Nickname changed to {name}!", ephemeral=True)
     except discord.Forbidden:
-        await interaction.response.send_message(
-            "I do not have permission to change your nickname.", ephemeral=True
-        )
-        return
+        await interaction.response.send_message("❌ I don’t have permission to change your nickname.", ephemeral=True)
+    except Exception as e:
+        await interaction.response.send_message("⚠️ An error occurred.", ephemeral=True)
+        print(f"Error while changing nickname: {e}")
 
-    # Remove unregistered role
-    if unregistered_role in member.roles:
-        try:
-            await member.remove_roles(unregistered_role)
-        except discord.Forbidden:
-            pass
-
-    # Give awaiting approval role
-    if awaiting_role not in member.roles:
-        try:
-            await member.add_roles(awaiting_role)
-        except discord.Forbidden:
-            pass
-
-    # Confirm registration
-    await interaction.response.send_message(
-        f"Your username has been set to **{username}**. You now have access to the server!",
-        ephemeral=True
-    )
-
-# ---------------- RUN BOT ----------------
-if TOKEN is None:
-    print("Error: DISCORD_TOKEN environment variable not set.")
-else:
-    bot.run(TOKEN)
+bot.run(DISCORD_TOKEN)
