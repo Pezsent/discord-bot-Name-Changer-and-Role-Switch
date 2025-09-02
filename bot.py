@@ -1,82 +1,74 @@
-import os
-import logging
 import discord
 from discord.ext import commands
-from discord import app_commands
+import logging
 
-# === Logging Setup ===
+# ---------- Logging Setup ----------
 logging.basicConfig(
     level=logging.INFO,
-    format="%(asctime)s %(levelname)s %(name)s %(message)s"
+    format="%(asctime)s %(levelname)s %(name)s %(message)s",
 )
 logger = logging.getLogger("discord-bot")
 
-# === Bot Setup ===
-TOKEN = os.getenv("DISCORD_BOT_TOKEN")
-GUILD_ID = int(os.getenv("DISCORD_GUILD_ID", 0))  # optional: use if you want per-guild sync
-
+# ---------- Intents ----------
 intents = discord.Intents.default()
-intents.members = True
-intents.message_content = False  # safer for slash-only bot
+intents.members = True  # required for role/nickname changes
 
 bot = commands.Bot(command_prefix="!", intents=intents)
-tree = bot.tree
 
-# === Role IDs ===
-ROLE_AWAITING_APPROVAL = 1383768771952509091  # ⏳ Awaiting Approval
+# ---------- Config ----------
+AWAITING_APPROVAL_ROLE = "⏳ Awaiting Approval"   # exact role name
+UNREGISTERED_ROLE = "Unregistered"               # exact role name
 
-# === Event Handlers ===
+
 @bot.event
 async def on_ready():
+    logger.info(f"✅ Logged in as {bot.user} (ID: {bot.user.id})")
+    synced = await bot.tree.sync()
+    logger.info(f"✅ Synced {len(synced)} global commands")
+
+
+# ---------- Slash Command ----------
+@bot.tree.command(name="register", description="Register with a new nickname")
+async def register(interaction: discord.Interaction, nickname: str):
+    member = interaction.user
+    old_nick = member.nick
+
     try:
-        logger.info(f"✅ Logged in as {bot.user} (ID: {bot.user.id})")
+        # 1. Change nickname
+        await member.edit(nick=nickname)
+        logger.info(f"Register command used by {member} (old nick: {old_nick}) → new nick: '{nickname}'")
 
-        # Sync slash commands
-        if GUILD_ID:
-            guild = discord.Object(id=GUILD_ID)
-            synced = await tree.sync(guild=guild)
-            logger.info(f"✅ Synced {len(synced)} commands to guild {GUILD_ID}")
+        # 2. Add Awaiting Approval role
+        role_awaiting = discord.utils.get(member.guild.roles, name=AWAITING_APPROVAL_ROLE)
+        if role_awaiting:
+            await member.add_roles(role_awaiting)
+            logger.info(f"✅ Added role '{AWAITING_APPROVAL_ROLE}' to {member}")
         else:
-            synced = await tree.sync()
-            logger.info(f"✅ Synced {len(synced)} global commands")
-    except Exception as e:
-        logger.exception("❌ Error during on_ready")
+            logger.warning(f"⚠️ Role '{AWAITING_APPROVAL_ROLE}' not found in guild {member.guild.name}")
 
-# === Slash Commands ===
-@tree.command(name="register", description="Register with a custom username")
-async def register(interaction: discord.Interaction, username: str):
-    try:
-        member = interaction.user
-        guild = interaction.guild
-
-        if guild is None:
-            await interaction.response.send_message("❌ This command must be used in a server.", ephemeral=True)
-            return
-
-        # Update nickname
-        old_nick = member.nick
-        await member.edit(nick=username)
-        logger.info(f"Register command used by {member} (old nick: {old_nick}) → new nick: '{username}'")
-
-        # Add Awaiting Approval role
-        role = guild.get_role(ROLE_AWAITING_APPROVAL)
-        if role:
-            await member.add_roles(role)
-            logger.info(f"✅ Added role '{role.name}' to {member}")
+        # 3. Remove Unregistered role
+        role_unregistered = discord.utils.get(member.guild.roles, name=UNREGISTERED_ROLE)
+        if role_unregistered:
+            if role_unregistered in member.roles:
+                await member.remove_roles(role_unregistered)
+                logger.info(f"✅ Removed role '{UNREGISTERED_ROLE}' from {member}")
+            else:
+                logger.info(f"ℹ️ {member} did not have the '{UNREGISTERED_ROLE}' role")
         else:
-            logger.warning(f"⚠️ Role ID {ROLE_AWAITING_APPROVAL} not found in guild {guild.id}")
+            logger.warning(f"⚠️ Role '{UNREGISTERED_ROLE}' not found in guild {member.guild.name}")
 
         await interaction.response.send_message(
-            f"✅ Registered with username: **{username}**. A moderator will review your registration.",
+            f"✅ Nickname updated to **{nickname}** and roles adjusted.",
             ephemeral=True
         )
 
+    except discord.Forbidden:
+        logger.error(f"❌ Missing permissions to update nickname or roles for {member}")
+        await interaction.response.send_message("❌ Bot does not have permission to change your nickname/roles.", ephemeral=True)
     except Exception as e:
-        logger.exception("❌ Error in /register command")
-        await interaction.response.send_message("⚠️ An error occurred while registering. Please try again later.", ephemeral=True)
+        logger.exception(f"❌ Unexpected error during register command for {member}")
+        await interaction.response.send_message("❌ An unexpected error occurred.", ephemeral=True)
 
-# === Run Bot ===
-if not TOKEN:
-    raise ValueError("❌ DISCORD_BOT_TOKEN environment variable is not set!")
 
-bot.run(TOKEN)
+# ---------- Run ----------
+bot.run("YOUR_TOKEN_HERE")
