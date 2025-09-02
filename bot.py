@@ -16,15 +16,16 @@ bot = commands.Bot(command_prefix="!", intents=intents)
 @bot.event
 async def on_ready():
     print(f"Logged in as {bot.user}")
-    # Register slash commands globally to avoid Missing Access
+    # Sync commands for this guild only (appears instantly)
+    guild = discord.Object(id=GUILD_ID)
     try:
-        await bot.tree.sync()  # Global sync
-        print("Slash commands synced globally.")
+        await bot.tree.sync(guild=guild)
+        print("Slash commands synced for your server!")
     except discord.Forbidden:
         print("Warning: Could not sync slash commands. Check bot permissions.")
 
 # ===== SLASH COMMAND =====
-@bot.tree.command(description="Register your Roblox username")
+@bot.tree.command(guild=discord.Object(id=GUILD_ID), description="Register your Roblox username")
 async def register(interaction: discord.Interaction, name: str):
     guild = bot.get_guild(GUILD_ID)
     if not guild:
