@@ -1,6 +1,7 @@
 import discord
 from discord.ext import commands
 import logging
+import os
 
 # ---------- Logging Setup ----------
 logging.basicConfig(
@@ -16,10 +17,10 @@ intents.members = True  # required for role/nickname changes
 bot = commands.Bot(command_prefix="!", intents=intents)
 
 # ---------- Config ----------
-AWAITING_APPROVAL_ROLE = "⏳ Awaiting Approval"   # exact role name
-UNREGISTERED_ROLE = "Unregistered"               # exact role name
+AWAITING_APPROVAL_ROLE_ID = 1383768771952509091  # ⏳ Awaiting Approval
+UNREGISTERED_ROLE_ID = 1412239619461746759      # Unregistered
 
-
+# ---------- Events ----------
 @bot.event
 async def on_ready():
     logger.info(f"✅ Logged in as {bot.user} (ID: {bot.user.id})")
@@ -39,36 +40,40 @@ async def register(interaction: discord.Interaction, nickname: str):
         logger.info(f"Register command used by {member} (old nick: {old_nick}) → new nick: '{nickname}'")
 
         # 2. Add Awaiting Approval role
-        role_awaiting = discord.utils.get(member.guild.roles, name=AWAITING_APPROVAL_ROLE)
+        role_awaiting = interaction.guild.get_role(AWAITING_APPROVAL_ROLE_ID)
         if role_awaiting:
             await member.add_roles(role_awaiting)
-            logger.info(f"✅ Added role '{AWAITING_APPROVAL_ROLE}' to {member}")
+            logger.info(f"✅ Added role '{role_awaiting.name}' to {member}")
         else:
-            logger.warning(f"⚠️ Role '{AWAITING_APPROVAL_ROLE}' not found in guild {member.guild.name}")
+            logger.warning(f"⚠️ Awaiting Approval role ID not found in guild {interaction.guild.name}")
 
         # 3. Remove Unregistered role
-        role_unregistered = discord.utils.get(member.guild.roles, name=UNREGISTERED_ROLE)
+        role_unregistered = interaction.guild.get_role(UNREGISTERED_ROLE_ID)
         if role_unregistered:
             if role_unregistered in member.roles:
                 await member.remove_roles(role_unregistered)
-                logger.info(f"✅ Removed role '{UNREGISTERED_ROLE}' from {member}")
+                logger.info(f"✅ Removed role '{role_unregistered.name}' from {member}")
             else:
-                logger.info(f"ℹ️ {member} did not have the '{UNREGISTERED_ROLE}' role")
+                logger.info(f"ℹ️ {member} did not have the Unregistered role")
         else:
-            logger.warning(f"⚠️ Role '{UNREGISTERED_ROLE}' not found in guild {member.guild.name}")
+            logger.warning(f"⚠️ Unregistered role ID not found in guild {interaction.guild.name}")
 
         await interaction.response.send_message(
-            f"✅ Nickname updated to **{nickname}** and roles adjusted.",
+            f"✅ Nickname updated to **{nickname}**, roles adjusted.",
             ephemeral=True
         )
 
     except discord.Forbidden:
         logger.error(f"❌ Missing permissions to update nickname or roles for {member}")
-        await interaction.response.send_message("❌ Bot does not have permission to change your nickname/roles.", ephemeral=True)
+        await interaction.response.send_message("❌ Bot lacks permission to change your nickname/roles.", ephemeral=True)
     except Exception as e:
         logger.exception(f"❌ Unexpected error during register command for {member}")
         await interaction.response.send_message("❌ An unexpected error occurred.", ephemeral=True)
 
 
 # ---------- Run ----------
-bot.run("YOUR_TOKEN_HERE")
+DISCORD_TOKEN = os.getenv("DISCORD_TOKEN")
+if not DISCORD_TOKEN:
+    raise ValueError("❌ DISCORD_TOKEN environment variable is not set in Pella!")
+
+bot.run(DISCORD_TOKEN)
