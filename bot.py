@@ -6,7 +6,7 @@ from discord.ext import commands
 TOKEN = os.getenv("DISCORD_TOKEN")  # read token from environment variable
 GUILD_ID = 1361678640403845211      # your server ID
 
-UNREGISTERED_ROLE = "Unregistered"         
+UNREGISTERED_ROLE = "Unregistered"
 AWAITING_APPROVAL_ROLE = "⏳ Awaiting Approval"
 # ----------------------------------------
 
@@ -20,8 +20,16 @@ bot = commands.Bot(command_prefix="?", intents=intents)  # prefix doesn't matter
 async def on_ready():
     print(f"Logged in as {bot.user}")
     guild = discord.Object(id=GUILD_ID)
+    
+    # Sync slash commands to the guild
     await bot.tree.sync(guild=guild)
     print("Slash commands synced for your server!")
+
+    # --- DEBUG: List all registered commands in the guild ---
+    commands_list = await bot.tree.fetch_commands(guild=guild)
+    print("Registered commands in this guild:")
+    for cmd in commands_list:
+        print(f"- {cmd.name}")
 
 # ---------------- COMMAND ----------------
 @bot.tree.command(guild=discord.Object(id=GUILD_ID), description="Register your Roblox username")
@@ -37,7 +45,9 @@ async def register(interaction: discord.Interaction, username: str):
     try:
         await member.edit(nick=username)
     except discord.Forbidden:
-        await interaction.response.send_message("I do not have permission to change your nickname.", ephemeral=True)
+        await interaction.response.send_message(
+            "I do not have permission to change your nickname.", ephemeral=True
+        )
         return
 
     # Remove unregistered role
@@ -55,7 +65,10 @@ async def register(interaction: discord.Interaction, username: str):
             pass
 
     # Confirm registration
-    await interaction.response.send_message(f"Your username has been set to **{username}**. You now have access to the server!", ephemeral=True)
+    await interaction.response.send_message(
+        f"Your username has been set to **{username}**. You now have access to the server!",
+        ephemeral=True
+    )
 
 # ---------------- RUN BOT ----------------
 if TOKEN is None:
